@@ -3,9 +3,9 @@ package main
 import (
 	"flag"
 	"fmt"
-	"grpc-apisix-sync/internal/apisix"
-	"grpc-apisix-sync/internal/config"
-	"grpc-apisix-sync/internal/sync"
+	"github.com/prasojoam/grpc-apisix-sync/internal/apisix"
+	"github.com/prasojoam/grpc-apisix-sync/internal/config"
+	"github.com/prasojoam/grpc-apisix-sync/internal/sync"
 	"log"
 )
 

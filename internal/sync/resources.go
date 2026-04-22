@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
-	"grpc-apisix-sync/internal/config"
+	"github.com/prasojoam/grpc-apisix-sync/internal/config"
 	"path/filepath"
 	"strings"
 

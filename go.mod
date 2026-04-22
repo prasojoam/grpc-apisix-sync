@@ -1,4 +1,4 @@
-module grpc-apisix-sync
+module github.com/prasojoam/grpc-apisix-sync
 
 go 1.26.2
 
