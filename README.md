@@ -14,6 +14,8 @@ I've worked on a project that uses gRPC for inter-service communication. The pro
 
 - **Service Synchronization**: Synchronize gRPC services with APISIX.
 - **Route Synchronization**: Synchronize gRPC routes with APISIX.
+- **Zero-Dependency Proto Compilation**: Pure-Go proto compiler—no `protoc` binary required!
+- **Parallelized Cleanup**: Optional `reset_on_start` to wipe the gateway state before syncing.
 
 ## 🛠 Installation
 
@@ -24,24 +26,102 @@ go install github.com/prasojoam/grpc-apisix-sync@latest
 
 ## 🚀 Usage
 
-### Basic Sync
-Synchronize a proto file with APISIX:
+### Command
 ```bash
 grpc-apisix-sync --config ./config.yaml --data ./data.yaml
 ```
 
-## ⚙️ Configuration
+## ⚙️ Configuration (`config.yaml`)
 
-You can use a configuration file (`config.yaml`) to manage settings:
+| Field | Type | Required | Default | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `apisix.url` | string | **Yes** | - | The base URL of the APISIX Admin API. |
+| `apisix.key` | string | **Yes** | - | The API key for the APISIX Admin API. |
+| `proto.includes` | string[] | No | `[]` | Additional search paths for `.proto` imports. |
+| `reset_on_start` | boolean | No | `false` | If true, wipes existing Routes, Services, Upstreams, and Protos before syncing. |
 
+### Example `config.yaml`
 ```yaml
 apisix:
   url: "http://localhost:9180"
   key: "your-apisix-key "
 proto:
-  path: "./proto"
   includes:
     - "/usr/local/include"
+reset_on_start: false
+```
+
+## 📊 Data Mapping (`data.yaml`)
+
+The `data.yaml` defines the infrastructure you want to sync.
+
+### Protos
+| Field | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `id` | string | **Yes** | The ID used to register the proto in APISIX. |
+| `path` | string | **Yes** | The local filesystem path to the `.proto` file. |
+
+### Upstreams
+| Field | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `id` | string | **Yes** | The ID used to register the upstream in APISIX. |
+| `nodes` | object[] | **Yes** | List of nodes for the upstream. |
+| `nodes[].host` | string | **Yes** | The host (IP or domain) of the gRPC server. |
+| `nodes[].port` | int | **Yes** | The port of the gRPC server. |
+| `nodes[].weight` | int | No (1) | Load balancing weight. |
+
+### Services
+| Field | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `id` | string | **Yes** | The ID used to register the service in APISIX. |
+| `upstream` | string | **Yes** | The ID of the upstream defined in the same file. |
+
+### Route Defaults
+Optional section to reduce repetition in the `routes` list.
+| Field | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `service` | string | No | Fallback service ID for routes without one. |
+| `proto` | string | No | Fallback proto ID for routes without one. |
+
+### Routes
+| Field | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `id` | string | **Yes** | The ID used to register the route in APISIX. |
+| `uri` | string | **Yes** | The public HTTP URI. |
+| `service` | string | No | Overrides `route_defaults.service`. |
+| `proto` | string | No | Overrides `route_defaults.proto`. |
+| `methods` | string | No | Comma-separated HTTP methods (e.g. `POST,OPTIONS`). |
+| `grpc` | string | **Yes** | The gRPC method in `package.Service/Method` format. |
+
+### Example `data.yaml`
+```yaml
+protos:
+  - id: "proto.user_service"
+    path: "./proto/user_service.proto"
+
+upstreams:
+  - id: "upstream.user_service"
+    nodes:
+      - host: "localhost"
+        port: 50051
+
+services:
+  - id: "service.user_service"
+    upstream: "upstream.user_service"
+
+route_defaults:
+  service: "service.user_service"
+  proto: "proto.user_service"
+
+routes:
+  - id: "route.user_service.login"
+    uri: "/user/login"
+    methods: "POST"
+    grpc: "user.User/Login"
+  - id: "route.user_service.get_profile"
+    uri: "/user/profile"
+    methods: "GET"
+    grpc: "user.User/GetProfile"
 ```
 
 ## 🤝 Contributing
