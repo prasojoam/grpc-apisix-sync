@@ -15,11 +15,25 @@ import (
 	"strings"
 
 	"github.com/bufbuild/protocompile"
+	"golang.org/x/sync/errgroup"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protodesc"
 	"google.golang.org/protobuf/types/descriptorpb"
 	"gopkg.in/yaml.v3"
 )
+
+// --- API Helpers ---
+
+type ApisixItem struct {
+	Value struct {
+		ID json.RawMessage `json:"id"`
+	} `json:"value"`
+}
+
+type ApisixListResponse struct {
+	Total int          `json:"total"`
+	List  []ApisixItem `json:"list"`
+}
 
 // --- Configuration Models ---
 // ... (previous structs)
@@ -93,10 +107,20 @@ type Syncer struct {
 	Client *http.Client
 }
 
+const Version = "v1.0.0"
+
 func main() {
 	configPath := flag.String("config", "config.yaml", "Path to config file")
 	dataPath := flag.String("data", "data.yaml", "Path to data file")
+
+	showVersion := flag.Bool("version", false, "Show version information")
+
 	flag.Parse()
+
+	if *showVersion {
+		fmt.Printf("grpc-apisix-sync %s\n", Version)
+		return
+	}
 
 	syncer := &Syncer{
 		Client: &http.Client{},
@@ -137,7 +161,9 @@ func (s *Syncer) LoadFiles(configPath, dataPath string) error {
 
 func (s *Syncer) Sync() error {
 	if s.Config.ResetOnStart {
-		fmt.Println("⚠️ reset_on_start is true (Cleanup logic not implemented yet)")
+		if err := s.Cleanup(); err != nil {
+			return fmt.Errorf("cleanup failed: %v", err)
+		}
 	}
 
 	// 1. Sync Protos
@@ -169,6 +195,73 @@ func (s *Syncer) Sync() error {
 	}
 
 	return nil
+}
+
+func (s *Syncer) Cleanup() error {
+	fmt.Println("🧹 Starting cleanup...")
+
+	// Order matters to avoid dependency issues
+	types := []string{"routes", "services", "upstreams", "protos"}
+	for _, t := range types {
+		if err := s.deleteAll(t); err != nil {
+			return err
+		}
+	}
+	fmt.Println("✨ Cleanup finished.")
+	return nil
+}
+
+func (s *Syncer) deleteAll(resourceType string) error {
+	url := fmt.Sprintf("%s/apisix/admin/%s", strings.TrimSuffix(s.Config.Apisix.URL, "/"), resourceType)
+	req, _ := http.NewRequest(http.MethodGet, url, nil)
+	req.Header.Set("X-API-KEY", s.Config.Apisix.Key)
+
+	resp, err := s.Client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("failed to fetch %s: %d", resourceType, resp.StatusCode)
+	}
+
+	var listResp ApisixListResponse
+	if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
+		return err
+	}
+
+	if listResp.Total == 0 {
+		return nil
+	}
+
+	fmt.Printf("🗑️ Deleting %d %s...\n", listResp.Total, resourceType)
+
+	g, ctx := errgroup.WithContext(context.Background())
+	g.SetLimit(10) // Limit concurrency to 10
+
+	for _, item := range listResp.List {
+		id := strings.Trim(string(item.Value.ID), "\"")
+		g.Go(func() error {
+			deleteUrl := fmt.Sprintf("%s/%s", url, id)
+			req, _ := http.NewRequestWithContext(ctx, http.MethodDelete, deleteUrl, nil)
+			req.Header.Set("X-API-KEY", s.Config.Apisix.Key)
+
+			dResp, err := s.Client.Do(req)
+			if err != nil {
+				return err
+			}
+			defer dResp.Body.Close()
+
+			if dResp.StatusCode >= 300 {
+				body, _ := io.ReadAll(dResp.Body)
+				return fmt.Errorf("failed to delete %s %s: %d %s", resourceType, id, dResp.StatusCode, string(body))
+			}
+			return nil
+		})
+	}
+
+	return g.Wait()
 }
 
 func (s *Syncer) syncProto(p ProtoDef) error {
