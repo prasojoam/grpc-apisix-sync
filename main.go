@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"context"
+	"encoding/base64"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -9,24 +11,36 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 
+	"github.com/bufbuild/protocompile"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protodesc"
+	"google.golang.org/protobuf/types/descriptorpb"
 	"gopkg.in/yaml.v3"
 )
 
 // --- Configuration Models ---
+// ... (previous structs)
 
 type ApisixConfig struct {
 	URL string `yaml:"url"`
 	Key string `yaml:"key"`
 }
 
+type ProtoConfig struct {
+	Includes []string `yaml:"includes"`
+}
+
 type Config struct {
 	Apisix       ApisixConfig `yaml:"apisix"`
+	Proto        ProtoConfig  `yaml:"proto"`
 	ResetOnStart bool         `yaml:"reset_on_start"`
 }
 
 // --- Data Models ---
+// (rest of the models remain same)
 
 type ProtoDef struct {
 	ID   string `yaml:"id"`
@@ -64,11 +78,11 @@ type RouteDef struct {
 }
 
 type Data struct {
-	Protos        []ProtoDef     `yaml:"protos"`
-	Upstreams     []UpstreamDef  `yaml:"upstreams"`
-	Services      []ServiceDef   `yaml:"services"`
-	RouteDefaults RouteDefaults  `yaml:"route_defaults"`
-	Routes        []RouteDef     `yaml:"routes"`
+	Protos        []ProtoDef    `yaml:"protos"`
+	Upstreams     []UpstreamDef `yaml:"upstreams"`
+	Services      []ServiceDef  `yaml:"services"`
+	RouteDefaults RouteDefaults `yaml:"route_defaults"`
+	Routes        []RouteDef    `yaml:"routes"`
 }
 
 // --- Sync Logic ---
@@ -158,13 +172,46 @@ func (s *Syncer) Sync() error {
 }
 
 func (s *Syncer) syncProto(p ProtoDef) error {
-	content, err := os.ReadFile(p.Path)
-	if err != nil {
-		return fmt.Errorf("failed to read proto file %s: %v", p.Path, err)
+	fmt.Printf("Compiling %s... \n", p.Path)
+
+	// Setup compiler
+	importPaths := append([]string{"."}, s.Config.Proto.Includes...)
+	// Ensure the directory of the proto file itself is in the import path
+	absPath, _ := filepath.Abs(p.Path)
+	protoDir := filepath.Dir(absPath)
+	importPaths = append(importPaths, protoDir)
+
+	compiler := protocompile.Compiler{
+		Resolver: protocompile.WithStandardImports(&protocompile.SourceResolver{
+			ImportPaths: importPaths,
+		}),
 	}
 
+	// Filename relative to import paths
+	fileName := filepath.Base(p.Path)
+
+	files, err := compiler.Compile(context.Background(), fileName)
+	if err != nil {
+		fmt.Println("❌ Compilation Error")
+		return fmt.Errorf("failed to compile proto %s: %v", p.Path, err)
+	}
+
+	// Bundle into FileDescriptorSet
+	fds := &descriptorpb.FileDescriptorSet{}
+	for _, f := range files {
+		fds.File = append(fds.File, protodesc.ToFileDescriptorProto(f))
+	}
+
+	pbBytes, err := proto.Marshal(fds)
+	if err != nil {
+		return fmt.Errorf("failed to marshal descriptor set: %v", err)
+	}
+
+	// Base64 encode for APISIX compatibility
+	encoded := base64.StdEncoding.EncodeToString(pbBytes)
+
 	payload := map[string]string{
-		"content": string(content),
+		"content": encoded,
 	}
 	return s.put("/protos/"+p.ID, payload)
 }
