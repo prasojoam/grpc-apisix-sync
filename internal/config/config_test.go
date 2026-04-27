@@ -75,3 +75,30 @@ upstreams:
 		t.Errorf("Expected port to be 8080, got %d", data.Upstreams[0].Nodes[0].Port)
 	}
 }
+
+func TestLoadFiles_IdPrefix(t *testing.T) {
+	cfgContent := `
+apisix:
+  url: "http://localhost:9180"
+  key: "secret"
+id_prefix: "user_service"
+`
+	cfgFile, _ := os.CreateTemp("", "config.yaml")
+	defer os.Remove(cfgFile.Name())
+	cfgFile.WriteString(cfgContent)
+	cfgFile.Close()
+
+	dataFile, _ := os.CreateTemp("", "data.yaml")
+	defer os.Remove(dataFile.Name())
+	dataFile.WriteString("upstreams: []")
+	dataFile.Close()
+
+	cfg, _, err := LoadFiles(cfgFile.Name(), dataFile.Name())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if cfg.IdPrefix != "user_service" {
+		t.Errorf("Expected id_prefix to be user_service, got %s", cfg.IdPrefix)
+	}
+}

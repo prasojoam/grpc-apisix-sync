@@ -56,7 +56,7 @@ func (s *Syncer) SyncProto(p config.ProtoDef) error {
 	payload := map[string]string{
 		"content": encoded,
 	}
-	return s.Client.Put("/protos/"+p.ID, payload)
+	return s.Client.Put("/protos/"+s.qualifyID(p.ID), payload)
 }
 
 func (s *Syncer) SyncUpstream(u config.UpstreamDef) error {
@@ -73,14 +73,14 @@ func (s *Syncer) SyncUpstream(u config.UpstreamDef) error {
 		"type":  "roundrobin",
 		"nodes": nodes,
 	}
-	return s.Client.Put("/upstreams/"+u.ID, payload)
+	return s.Client.Put("/upstreams/"+s.qualifyID(u.ID), payload)
 }
 
 func (s *Syncer) SyncService(svc config.ServiceDef) error {
 	payload := map[string]interface{}{
-		"upstream_id": svc.Upstream,
+		"upstream_id": s.qualifyID(svc.Upstream),
 	}
-	return s.Client.Put("/services/"+svc.ID, payload)
+	return s.Client.Put("/services/"+s.qualifyID(svc.ID), payload)
 }
 
 func (s *Syncer) SyncRoute(r config.RouteDef) error {
@@ -109,10 +109,10 @@ func (s *Syncer) SyncRoute(r config.RouteDef) error {
 
 	payload := map[string]interface{}{
 		"uri":        r.URI,
-		"service_id": serviceID,
+		"service_id": s.qualifyID(serviceID),
 		"plugins": map[string]interface{}{
 			"grpc-transcode": map[string]interface{}{
-				"proto_id": protoID,
+				"proto_id": s.qualifyID(protoID),
 				"service":  serviceName,
 				"method":   methodName,
 			},
@@ -122,5 +122,5 @@ func (s *Syncer) SyncRoute(r config.RouteDef) error {
 		payload["methods"] = methods
 	}
 
-	return s.Client.Put("/routes/"+r.ID, payload)
+	return s.Client.Put("/routes/"+s.qualifyID(r.ID), payload)
 }

@@ -37,7 +37,7 @@ type ApisixListResponse struct {
 	List  []ApisixItem `json:"list"`
 }
 
-func (c *Client) DeleteAll(resourceType string) error {
+func (c *Client) DeleteAll(resourceType string, prefix string) error {
 	url := fmt.Sprintf("%s/apisix/admin/%s", c.BaseURL, resourceType)
 	req, _ := http.NewRequest(http.MethodGet, url, nil)
 	req.Header.Set("X-API-KEY", c.APIKey)
@@ -61,12 +61,27 @@ func (c *Client) DeleteAll(resourceType string) error {
 		return nil
 	}
 
-	fmt.Printf("🗑️ Deleting %d %s...\n", listResp.Total, resourceType)
+	// Filter items by prefix
+	var targetItems []ApisixItem
+	for _, item := range listResp.List {
+		id := strings.Trim(string(item.Value.ID), "\"")
+		if prefix != "" && !strings.HasPrefix(id, prefix) {
+			continue
+		}
+		targetItems = append(targetItems, item)
+	}
+
+	if len(targetItems) == 0 {
+		fmt.Printf("No %s found with prefix '%s', skipping cleanup.\n", resourceType, prefix)
+		return nil
+	}
+
+	fmt.Printf("🗑️ Deleting %d %s...\n", len(targetItems), resourceType)
 
 	g, ctx := errgroup.WithContext(context.Background())
 	g.SetLimit(10)
 
-	for _, item := range listResp.List {
+	for _, item := range targetItems {
 		id := strings.Trim(string(item.Value.ID), "\"")
 		g.Go(func() error {
 			deleteUrl := fmt.Sprintf("%s/%s", url, id)

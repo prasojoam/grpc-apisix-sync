@@ -21,6 +21,7 @@ type Config struct {
 	Apisix       ApisixConfig `yaml:"apisix"`
 	Proto        ProtoConfig  `yaml:"proto"`
 	ResetOnStart bool         `yaml:"reset_on_start"`
+	IdPrefix     string       `yaml:"id_prefix"`
 }
 
 // --- Data Models ---

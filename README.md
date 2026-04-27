@@ -63,6 +63,7 @@ grpc-apisix-sync --data data.yaml
 | `apisix.key` | string | **Yes** | - | The API key for the APISIX Admin API. |
 | `proto.includes` | string[] | No | `[]` | Additional search paths for `.proto` imports. |
 | `reset_on_start` | boolean | No | `false` | If true, wipes existing Routes, Services, Upstreams, and Protos before syncing. |
+| `id_prefix` | string | No | - | Prefix prepended to all resource IDs (e.g., `user_service.`). Scopes `reset_on_start`. |
 
 ### Example `config.yaml`
 ```yaml
@@ -73,7 +74,20 @@ proto:
   includes:
     - "/usr/local/include"
 reset_on_start: false
+id_prefix: "user_service"
 ```
+
+## 🎯 Resource ID Prefixing
+
+When `id_prefix` is set, all resource IDs defined in `data.yaml` will be prepended with the prefix and a dot.
+
+**Example:**
+If `id_prefix: "auth"`, then an upstream with `id: "main"` becomes `auth.main` in APISIX.
+
+### Scoped Cleanup
+If `reset_on_start: true` is set along with `id_prefix`, the tool will **only** delete resources in APISIX that start with that prefix. This allows multiple services to share the same APISIX instance without wiping each other's configuration.
+
+If `id_prefix` is omitted, `reset_on_start` will delete **all** resources of types `routes`, `services`, `upstreams`, and `protos`.
 
 ## 📊 Data Mapping (`data.yaml`)
 

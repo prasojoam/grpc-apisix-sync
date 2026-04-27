@@ -20,6 +20,13 @@ func NewSyncer(cfg *config.Config, data *config.Data, client *apisix.Client) *Sy
 	}
 }
 
+func (s *Syncer) qualifyID(id string) string {
+	if s.Config.IdPrefix == "" || id == "" {
+		return id
+	}
+	return s.Config.IdPrefix + "." + id
+}
+
 func (s *Syncer) Sync() error {
 	if s.Config.ResetOnStart {
 		if err := s.Cleanup(); err != nil {
@@ -63,8 +70,13 @@ func (s *Syncer) Cleanup() error {
 
 	// Order matters to avoid dependency issues
 	types := []string{"routes", "services", "upstreams", "protos"}
+	prefix := ""
+	if s.Config.IdPrefix != "" {
+		prefix = s.Config.IdPrefix + "."
+	}
+
 	for _, t := range types {
-		if err := s.Client.DeleteAll(t); err != nil {
+		if err := s.Client.DeleteAll(t, prefix); err != nil {
 			return err
 		}
 	}
