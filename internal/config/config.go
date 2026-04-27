@@ -77,7 +77,9 @@ func LoadFiles(configPath, dataPath string) (*Config, *Data, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	if err := yaml.Unmarshal(cfgData, cfg); err != nil {
+	// Expand environment variables
+	expandedCfgData := os.ExpandEnv(string(cfgData))
+	if err := yaml.Unmarshal([]byte(expandedCfgData), cfg); err != nil {
 		return nil, nil, err
 	}
 
@@ -86,7 +88,9 @@ func LoadFiles(configPath, dataPath string) (*Config, *Data, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	if err := yaml.Unmarshal(dataBytes, data); err != nil {
+	// Expand environment variables
+	expandedData := os.ExpandEnv(string(dataBytes))
+	if err := yaml.Unmarshal([]byte(expandedData), data); err != nil {
 		return nil, nil, err
 	}
 

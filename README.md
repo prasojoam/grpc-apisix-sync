@@ -16,6 +16,7 @@ I've worked on a project that uses gRPC for inter-service communication. The pro
 - **Route Synchronization**: Synchronize gRPC routes with APISIX.
 - **Zero-Dependency Proto Compilation**: Pure-Go proto compiler—no `protoc` binary required!
 - **Parallelized Cleanup**: Optional `reset_on_start` to wipe the gateway state before syncing.
+- **Native Environment Variable Support**: Use `${VAR}` syntax in YAML files for dynamic configuration.
 
 ## 🛠 Installation
 
@@ -29,6 +30,29 @@ go install github.com/prasojoam/grpc-apisix-sync@latest
 ### Command
 ```bash
 grpc-apisix-sync --config ./config.yaml --data ./data.yaml
+```
+
+## 🌍 Environment Variables
+
+The tool natively supports environment variable expansion in both `config.yaml` and `data.yaml`. This allows you to keep sensitive information out of your version control and easily switch between environments.
+
+### Syntax
+Use `${VARIABLE_NAME}` or `$VARIABLE_NAME` anywhere in your YAML files.
+
+### Example
+```yaml
+# data.yaml
+upstreams:
+  - id: "auth-service"
+    nodes:
+      - host: "${AUTH_SERVICE_HOST}"
+        port: ${AUTH_SERVICE_PORT}
+```
+
+```bash
+export AUTH_SERVICE_HOST="auth.production.svc"
+export AUTH_SERVICE_PORT=8080
+grpc-apisix-sync --data data.yaml
 ```
 
 ## ⚙️ Configuration (`config.yaml`)
