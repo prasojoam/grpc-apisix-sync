@@ -9,7 +9,7 @@ import (
 	"log"
 )
 
-const Version = "v1.1.0"
+const Version = "v1.1.1"
 
 func main() {
 	configPath := flag.String("config", "config.yaml", "Path to config file")

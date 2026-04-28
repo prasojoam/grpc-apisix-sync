@@ -70,8 +70,9 @@ func (s *Syncer) SyncUpstream(u config.UpstreamDef) error {
 	}
 
 	payload := map[string]interface{}{
-		"type":  "roundrobin",
-		"nodes": nodes,
+		"type":   "roundrobin",
+		"scheme": "grpc",
+		"nodes":  nodes,
 	}
 	return s.Client.Put("/upstreams/"+s.qualifyID(u.ID), payload)
 }
